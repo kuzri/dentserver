@@ -2,9 +2,10 @@ const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
 const AWS = require('aws-sdk');
-const mysql = require('mysql2/promise');
+const { Pool } = require('pg');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
+require('dotenv').config()
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -16,27 +17,30 @@ AWS.config.update({
   region: process.env.AWS_REGION || 'ap-northeast-2'
 });
 
+console.log("DB_HOST env:", process.env.DB_HOST);
 const s3 = new AWS.S3();
 
-// RDS MySQL 연결 설정
-const dbConfig = {
+// RDS PostgreSQL 연결 설정
+const dbPool = new Pool({
   host: process.env.DB_HOST,
-  port: process.env.DB_PORT || 3306,
+  port: process.env.DB_PORT || 5432,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0
-};
-
-const dbPool = mysql.createPool(dbConfig);
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  max: 10, // 최대 연결 수
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+});
 
 // CORS 설정
-app.use(cors({
-  origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000'],
-  credentials: true
-}));
+app.use(cors(
+//   {
+//   // origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:5147'],
+//   origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:5147'],
+//   credentials: true
+// }
+));
 
 // JSON 파싱 미들웨어
 app.use(express.json());
@@ -683,7 +687,7 @@ process.on('SIGINT', async () => {
 });
 
 // 서버 시작
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 서버가 포트 ${PORT}에서 실행 중입니다.`);
   console.log(`📊 Health Check: http://localhost:${PORT}/health`);
   console.log(`🗄️  Database: ${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`);
